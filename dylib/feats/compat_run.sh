@@ -1279,6 +1279,9 @@ cat > "$loader_contents/Info.plist" <<PLIST
   <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSMicrophoneUsageDescription</key><string>This game would like to access your microphone.</string>
+  <key>NSCameraUsageDescription</key><string>This game would like to access your camera.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>This game would like to access devices on your local network.</string>
 $uielement_arg
 $icon_arg
 </dict>
