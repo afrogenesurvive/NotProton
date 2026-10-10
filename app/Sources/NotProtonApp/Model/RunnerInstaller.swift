@@ -162,9 +162,8 @@ enum RunnerInstaller {
                         ))
                     }
                 }
-                if removingFolder, builds.isEmpty, failures.count == earlierFailures,
-                    unlinkat(parent, SupportPaths.prefixTemplateFolder, AT_REMOVEDIR) == 0 {
-                    unlinkat(parent, ".notproton-template.lock", 0)
+                if removingFolder, builds.isEmpty, failures.count == earlierFailures {
+                    unlinkat(parent, SupportPaths.prefixTemplateFolder, AT_REMOVEDIR)
                 }
             } catch {
                 failures.append(StepFailure(
