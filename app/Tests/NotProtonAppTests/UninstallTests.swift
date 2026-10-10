@@ -16,6 +16,13 @@ struct UninstallTests {
         var all: [UninstallPhase] { lock.lock(); defer { lock.unlock() }; return seen }
     }
 
+    private final class Flag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var raised = false
+        func set() { lock.withLock { raised = true } }
+        var value: Bool { lock.withLock { raised } }
+    }
+
     private struct Layout: Sendable {
         let root: URL
         let app: URL
@@ -226,6 +233,62 @@ struct UninstallTests {
         #expect(!files.fileExists(atPath: layout.secondTool.path(percentEncoded: false)))
         #expect(files.fileExists(atPath: layout.foreignTool.path(percentEncoded: false)))
         #expect(unpinnedWithoutLosingTheRest(layout.updateBlock))
+    }
+
+    @Test("A removal does not install Steam when there is none")
+    func leavesAMissingSteamMissing() async throws {
+        let layout = try layout()
+        defer { try? FileManager.default.removeItem(at: layout.root) }
+        try FileManager.default.removeItem(at: layout.app)
+        let repaired = Flag()
+
+        let outcome = try await Uninstall.run(
+            app: layout.app,
+            innerPlist: layout.innerPlist,
+            updateBlocks: [layout.updateBlock],
+            legacyCompat: layout.legacyCompat,
+            compatTools: layout.compatTools,
+            directories: [layout.support, layout.caches],
+            libraries: [],
+            repair: { _ in repaired.set() },
+            stop: { _ in false }
+        )
+
+        #expect(!repaired.value)
+        #expect(!outcome.steamInstalled)
+        #expect(!outcome.steamNeedsRedownload)
+        #expect(!FileManager.default.fileExists(atPath: layout.app.path(percentEncoded: false)))
+        #expect(!FileManager.default.fileExists(atPath: layout.support.path(percentEncoded: false)))
+    }
+
+    @Test("A restore that fails asks for a redownload")
+    func asksForARedownloadWhenTheRestoreFails() async throws {
+        let layout = try layout()
+        defer { try? FileManager.default.removeItem(at: layout.root) }
+        struct Offline: Error {}
+
+        let outcome = try await Uninstall.run(
+            app: layout.app,
+            innerPlist: layout.innerPlist,
+            updateBlocks: [layout.updateBlock],
+            legacyCompat: layout.legacyCompat,
+            compatTools: layout.compatTools,
+            directories: [layout.support, layout.caches],
+            libraries: [],
+            repair: { _ in throw Offline() },
+            stop: { _ in false }
+        )
+
+        #expect(outcome.steamNeedsRedownload)
+    }
+
+    @Test("The command line names the path it could not write")
+    func namesTheRefusedPath() {
+        let path = "/nonexistent/Steam.app/Contents/Info.plist"
+        let message = RemoveEverythingCommand.failureMessage(WriteRefused(path: path))
+        #expect(message.hasPrefix("Could not write \(path). "))
+        #expect(RemoveEverythingCommand.failureMessage(StepFailure(step: "x", detail: "Steam is running, please close Steam."))
+            == StepFailure(step: "x", detail: "Steam is running, please close Steam.").localizedDescription)
     }
 
     @Test("The copy the restore downloads is removed with everything else")

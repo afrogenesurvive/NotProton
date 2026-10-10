@@ -23,8 +23,11 @@ enum UninstallPhase: Sendable {
 struct UninstallOutcome: Sendable {
     let stoppedClient: Bool
     let detached: Bool
+    let steamInstalled: Bool
     let restoredValveSignature: Bool
     let removed: [String]
+
+    var steamNeedsRedownload: Bool { steamInstalled && !restoredValveSignature }
 }
 
 enum Uninstall {
@@ -54,12 +57,14 @@ enum Uninstall {
         report(.detaching)
         let detached = try detach(from: app, innerPlist: innerPlist, updateBlocks: updateBlocks)
 
-        let restored: Bool
-        do {
-            try await repair { report(.restoring($0)) }
-            restored = true
-        } catch {
-            restored = false
+        // Validate if Steam is present before restoring
+        let steamInstalled = FileManager.default.fileExists(atPath: app.path(percentEncoded: false))
+        var restored = false
+        if steamInstalled {
+            do {
+                try await repair { report(.restoring($0)) }
+                restored = true
+            } catch {}
         }
 
         report(.removing)
@@ -76,6 +81,7 @@ enum Uninstall {
         return UninstallOutcome(
             stoppedClient: stopped,
             detached: detached,
+            steamInstalled: steamInstalled,
             restoredValveSignature: restored,
             removed: removed
         )

@@ -18,16 +18,29 @@ enum RemoveEverythingCommand {
                 output.say(phase.label)
             }
             output.say(
-                result.restoredValveSignature
-                    ? "NotProton has been removed."
-                    : "NotProton has been removed. Steam needs to be redownloaded. "
-                        + "Please run Repair Steam again once you are online."
+                result.steamNeedsRedownload
+                    ? "NotProton has been removed. Steam could not be restored. "
+                        + "Reinstall Steam from steampowered.com before using it again."
+                    : "NotProton has been removed."
             )
             return 0
         } catch {
-            FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+            FileHandle.standardError.write(Data("\(failureMessage(error))\n".utf8))
             return 1
         }
+    }
+
+    static func failureMessage(_ error: Error) -> String {
+        guard let refused = error as? WriteRefused else { return error.localizedDescription }
+        let advice = switch refused.remedy {
+        case .appManagement:
+            "Allow your terminal app in System Settings > Privacy & Security > App Management, then run it again."
+        case .otherAccount:
+            "Steam was installed by another account on this Mac. Run this again while logged in to that account."
+        case .ownership:
+            "Check permissions, make sure your user owns the folder."
+        }
+        return "Could not write \(refused.path). \(advice)"
     }
 
     private final class Output: @unchecked Sendable {
