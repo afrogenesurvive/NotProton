@@ -82,6 +82,33 @@ struct TemplateCleanupTests {
         #expect(!FileManager.default.fileExists(atPath: layout.template.path))
     }
 
+    @Test("Removing every build takes the empty template folder and its lock but no game prefix")
+    func fullRemovalTakesFolderAndLock() throws {
+        let layout = try Layout()
+        defer { try? FileManager.default.removeItem(at: layout.root) }
+        let save = layout.library.compatdata.appending(path: "700330/pfx/drive_c/save.dat")
+        try FileManager.default.createDirectory(at: save.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("save".utf8).write(to: save)
+
+        #expect(RunnerInstaller.removePrefixTemplates(keeping: [], libraries: [layout.library], removingFolder: true).isEmpty)
+
+        #expect(!FileManager.default.fileExists(atPath: layout.folder.path))
+        #expect(!FileManager.default.fileExists(atPath: layout.lock.path))
+        #expect(FileManager.default.fileExists(atPath: save.path))
+    }
+
+    @Test("A template folder with unknown files keeps the folder and its lock")
+    func unknownFilesKeepFolderAndLock() throws {
+        let layout = try Layout()
+        defer { try? FileManager.default.removeItem(at: layout.root) }
+        try Data("keep".utf8).write(to: layout.folder.appending(path: "notes"))
+
+        #expect(RunnerInstaller.removePrefixTemplates(keeping: [], libraries: [layout.library], removingFolder: true).isEmpty)
+
+        #expect(FileManager.default.fileExists(atPath: layout.folder.appending(path: "notes").path))
+        #expect(FileManager.default.fileExists(atPath: layout.lock.path))
+    }
+
     @MainActor
     @Test("The bridge copies on every drive are counted once")
     func countsBridgeCopies() async throws {

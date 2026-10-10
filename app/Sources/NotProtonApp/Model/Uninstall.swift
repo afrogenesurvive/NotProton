@@ -66,7 +66,8 @@ enum Uninstall {
         let removed = try remove(
             legacyCompat: legacyCompat, compatTools: compatTools, directories: directories
         )
-        let templateFailures = RunnerInstaller.removePrefixTemplates(keeping: [], libraries: libraries)
+        let templateFailures = RunnerInstaller.removePrefixTemplates(
+            keeping: [], libraries: libraries, removingFolder: true)
         if !templateFailures.isEmpty {
             throw StepFailure(step: step, detail: templateFailures.map(\.detail).joined(separator: "\n"))
         }
