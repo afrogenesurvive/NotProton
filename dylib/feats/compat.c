@@ -562,28 +562,25 @@ int np_compat_ensure_tool_manifest(void) {
     return failed ? -1 : 0;
 }
 
-const char *np_compat_tool_dir(void) {
-    static char dir[640];
-    static int resolved = 0;
+static char g_tool_dir[640];
 
-    if (resolved)
-        return dir[0] ? dir : NULL;
-
-    resolved = 1;
+static void resolve_tool_dir(void) {
     load_tool_list_once();
 
     if (g_tool_count > 0) {
-        snprintf(dir, sizeof(dir), "%s", g_tools[0].dir);
-        return dir;
+        snprintf(g_tool_dir, sizeof(g_tool_dir), "%s", g_tools[0].dir);
+        return;
     }
 
     char tools_dir[512];
-    if (tools_dir_path(tools_dir, sizeof(tools_dir)) != 0) {
-        dir[0] = '\0';
-        return NULL;
-    }
-    snprintf(dir, sizeof(dir), "%s/%s", tools_dir, TOOL_DIR_NAME);
-    return dir;
+    if (tools_dir_path(tools_dir, sizeof(tools_dir)) == 0)
+        snprintf(g_tool_dir, sizeof(g_tool_dir), "%s/%s", tools_dir, TOOL_DIR_NAME);
+}
+
+const char *np_compat_tool_dir(void) {
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+    pthread_once(&once, resolve_tool_dir);
+    return g_tool_dir[0] ? g_tool_dir : NULL;
 }
 
 int np_compat_runs_tool(const char *cmd) {

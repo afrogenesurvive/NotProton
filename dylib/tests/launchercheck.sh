@@ -217,5 +217,43 @@ for failure in install backup signal signal-installed missing-stage restore; do
   is "$failure cleans staging" "0" "$(leftover)"
 done
 
+echo "== launch Dock icon =="
+icon_funcs=$(sed -n '/^find_client_root() {$/,/^case "\$verb" in$/p' "$SRC" | sed '$d')
+icon_lines=$(sed -n '/^icon_arg=""$/,/^\[ -n "\$icon_arg" \] ||/p' "$SRC")
+[ -n "$icon_funcs" ] && [ -n "$icon_lines" ] || { echo "FAIL: launch icon code not found"; exit 1; }
+eval "$icon_funcs"
+np_support="$T/support"
+iconmaker="$np_support/iconmaker"
+mkdir -p "$np_support" "$T/steam/appcache/librarycache/100"
+printf '#!/bin/sh\nprintf "icon=abc123\\n"\n' > "$np_support/appinfo"
+printf '#!/bin/sh\ncp "$1" "$2"\n' > "$iconmaker"
+chmod 755 "$np_support/appinfo" "$iconmaker"
+: > "$T/steam/appcache/appinfo.vdf"
+printf 'game art' > "$T/steam/appcache/librarycache/100/abc123.jpg"
+app_id=100
+target=""
+find_client_root "$T/steam/Steam.AppBundle/Steam/Contents/MacOS"
+read_app_meta
+loader_root="$T/launchers/100"
+loader_res="$loader_root/new/Contents/Resources"
+mkdir -p "$loader_res"
+: > "$log"
+eval "$icon_lines"
+is "icon key set" "  <key>CFBundleIconFile</key><string>game</string>" "$icon_arg"
+is "bundle gets the artwork" "game art" "$(cat "$loader_res/game.icns")"
+is "artwork cached with the launcher" "game art" "$(cat "$loader_root/game.icns")"
+is "artwork built" "icon built from $T/steam/appcache/librarycache/100/abc123.jpg" "$(cat "$log")"
+rm -f "$iconmaker" "$loader_res/game.icns"
+: > "$log"
+eval "$icon_lines"
+is "cached artwork reused" "icon reused from $T/steam/appcache/librarycache/100/abc123.jpg" "$(cat "$log")"
+is "reused artwork copied" "game art" "$(cat "$loader_res/game.icns")"
+rm "$T/steam/appcache/librarycache/100/abc123.jpg" "$loader_res/game.icns"
+: > "$log"
+eval "$icon_lines"
+is "no artwork, no icon key" "" "$icon_arg"
+is "no artwork logged" "no icon resolved, launching without one" "$(cat "$log")"
+if [ -d "$np_support/shortcut-icons" ]; then bad "launch leaves shortcut cache alone" "absent" "present"; else ok "launch leaves shortcut cache alone"; fi
+
 [ "$fails" -eq 0 ] || { echo "launchercheck: $fails failed"; exit 1; }
 echo "launchercheck: all passed"
