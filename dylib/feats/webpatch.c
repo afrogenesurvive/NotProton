@@ -17,8 +17,13 @@
 
 // Stands for the name set by np_webpatch_set_fallback_tool.
 #define NP_FALLBACK_TOOL "\021"
+// Stands for the JS array set by np_webpatch_set_fex_tools.
+#define NP_FEX_TOOLS "\022"
 
-static _Thread_local char g_fallback_tool[128];
+#define NP_TOOL_NAME_MAX 128
+
+static _Thread_local char g_fallback_tool[NP_TOOL_NAME_MAX];
+static _Thread_local char g_fex_tools[NP_WEBPATCH_FEX_TOOLS_MAX * (NP_TOOL_NAME_MAX + 3) + 3] = "[]";
 
 typedef struct {
     const char *find;
@@ -37,15 +42,41 @@ static int cap_index(unsigned char c) {
     return (c >= 1 && c <= NP_CAP_MAX) ? c - 1 : -1;
 }
 
-void np_webpatch_set_fallback_tool(const char *name) {
-    g_fallback_tool[0] = '\0';
-    if (!name) return;
+static int is_tool_name(const char *name) {
     size_t n = strlen(name);
-    if (n >= sizeof(g_fallback_tool)) return;
+    if (n >= NP_TOOL_NAME_MAX) return 0;
     for (size_t i = 0; i < n; i++)
         if (!is_ident_char((unsigned char)name[i]) && name[i] != '.' && name[i] != '-')
-            return;
-    memcpy(g_fallback_tool, name, n + 1);
+            return 0;
+    return 1;
+}
+
+void np_webpatch_set_fallback_tool(const char *name) {
+    g_fallback_tool[0] = '\0';
+    if (name && is_tool_name(name))
+        memcpy(g_fallback_tool, name, strlen(name) + 1);
+}
+
+void np_webpatch_set_fex_tools(const char *const *names, size_t count) {
+    size_t n = 0;
+    g_fex_tools[n++] = '[';
+    for (size_t i = 0; i < count && i < NP_WEBPATCH_FEX_TOOLS_MAX; i++) {
+        if (!names[i] || !*names[i] || !is_tool_name(names[i])) continue;
+        size_t len = strlen(names[i]);
+        if (n > 1) g_fex_tools[n++] = ',';
+        g_fex_tools[n++] = '"';
+        memcpy(g_fex_tools + n, names[i], len);
+        n += len;
+        g_fex_tools[n++] = '"';
+    }
+    g_fex_tools[n++] = ']';
+    g_fex_tools[n] = '\0';
+}
+
+static const char *marker_text(char c) {
+    if (c == NP_FALLBACK_TOOL[0]) return g_fallback_tool;
+    if (c == NP_FEX_TOOLS[0]) return g_fex_tools;
+    return NULL;
 }
 
 static size_t match_at(const char *src, size_t len, size_t pos,
@@ -54,9 +85,10 @@ static size_t match_at(const char *src, size_t len, size_t pos,
 
     size_t s = pos;
     for (const char *f = find; *f; f++) {
-        if (*f == NP_FALLBACK_TOOL[0]) {
-            size_t n = strlen(g_fallback_tool);
-            if (s + n > len || memcmp(src + s, g_fallback_tool, n) != 0) return 0;
+        const char *text = marker_text(*f);
+        if (text) {
+            size_t n = strlen(text);
+            if (s + n > len || memcmp(src + s, text, n) != 0) return 0;
             s += n;
             continue;
         }
@@ -115,8 +147,9 @@ static int out_put(np_out_t *o, const char *p, size_t n) {
 
 static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     for (const char *r = replace; *r; r++) {
-        if (*r == NP_FALLBACK_TOOL[0]) {
-            if (!out_put(o, g_fallback_tool, strlen(g_fallback_tool))) return 0;
+        const char *text = marker_text(*r);
+        if (text) {
+            if (!out_put(o, text, strlen(text))) return 0;
             continue;
         }
         int ci = cap_index((unsigned char)*r);
@@ -179,11 +212,17 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     ".MSCXPanel .MSCXRow{display:flex;flex-direction:row;padding:9px;margin:0;" \
     "color:#dfe3e6;background:rgba(59,63,72,.5);border-radius:3px}" \
     ".MSCXPanel .MSCXRow:hover{box-shadow:0 6px 8px 0 rgba(0,0,0,.16)}" \
+    ".MSCXPanel .MSCXNote{padding:6px 2px 0;color:#ffc82c;font-size:13px}" \
     ".MSCXNoBottomGap{margin-bottom:0}\""
 
+// The FEX build runs arm64 Wine, so D3DMetal (x86_64 only) and its DLSS flag cannot
+// load, and Rosetta, which reads ROSETTA_ADVERTISE_AVX, never runs. A game already set
+// to D3DMetal keeps the entry and a note, so the page does not claim a backend the game
+// is not getting.
 #define NP_CX_OPTIONS_BODY(ARG, RT, BARREL) \
     ARG "=>{" \
     "const t=" ARG ".details,o=t.strLaunchOptions||\"\"," \
+    "fex=" NP_FEX_TOOLS ".indexOf(t.strCompatToolName||\"" NP_FALLBACK_TOOL "\")>=0," \
     "npZh=" NP_WEB_IS_ZH ",npL=(en,zh)=>npZh?zh:en," \
     NP_CX_LAUNCH_PARSE \
     "g=k=>{const p=E.e.filter(w=>o.startsWith(k+\"=\",w.start)).pop();" \
@@ -199,7 +238,8 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     "checked:g(ks[0])===on," \
     "onChange:v=>s(ks.map(k=>[k,v?on:(off||\"\")]))},ks[0])," \
     "b=g(\"CX_GRAPHICS_BACKEND\")," \
-    "dm=\"\"===b||\"d3dmetal\"===b," \
+    "dk=fex&&\"d3dmetal\"===b," \
+    "dm=!fex&&(\"\"===b||\"d3dmetal\"===b)," \
     "dx=\"\"===b||\"dxmt\"===b," \
     "sw=\"1\"===g(\"DXMT_METALFX_SPATIAL_SWAPCHAIN\")," \
     "F=\"d3d11.metalSpatialUpscaleFactor=\"," \
@@ -217,7 +257,7 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     "{data:\"d3dmetal\",label:\"D3DMetal\"}," \
     "{data:\"dxmt\",label:\"DXMT\"}," \
     "{data:\"dxvk\",label:\"DXVK\"}," \
-    "{data:\"wined3d\",label:\"WineD3D\"}];" \
+    "{data:\"wined3d\",label:\"WineD3D\"}].filter(x=>!fex||dk||x.data!==\"d3dmetal\");" \
     "if(t.unAppID<2147483648&&(t.vecPlatforms||[]).indexOf(\"osx\")>=0" \
     "&&!t.strCompatToolName)return null;" \
     "return(0," RT ".jsx)(\"div\",{className:\"MSCXPanel\",children:(0," RT ".jsxs)(" RT ".Fragment,{children:[" \
@@ -229,10 +269,14 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     ".concat(\"\"===v.data||\"dxmt\"===v.data?[]:" \
     "[[\"DXMT_METALFX_SPATIAL_SWAPCHAIN\",\"\"],[\"DXMT_CONFIG\",fx(\"\")]])" \
     ".concat(\"dxmt\"===v.data?[]:[[\"DXMT_ENABLE_NVEXT\",\"\"]]))})," \
+    "dk&&(0," RT ".jsx)(\"div\",{className:\"MSCXNote\"," \
+    "children:npL(\"D3DMetal needs the Rosetta build of CrossOver. On the FEX build, " \
+    "this game runs on another backend.\",\"D3DMetal 需要 Rosetta 版 CrossOver。" \
+    "在 FEX 版中，此游戏会使用其他图形后端。\")},\"fexnote\")," \
     "T([\"MTL_HUD_ENABLED\"],npL(\"Metal HUD\",\"Metal 性能监视器\"),\"1\")," \
     "dm&&T([\"D3DM_ENABLE_METALFX\"],\"DLSS\",\"1\")," \
     "\"dxmt\"===b&&T([\"DXMT_ENABLE_NVEXT\"],\"DLSS\",\"1\")," \
-    "T([\"ROSETTA_ADVERTISE_AVX\"],npL(\"Advertise AVX2 to Rosetta\",\"向 Rosetta 声明 AVX2 支持\"),\"1\",\"0\")," \
+    "!fex&&T([\"ROSETTA_ADVERTISE_AVX\"],npL(\"Advertise AVX2 to Rosetta\",\"向 Rosetta 声明 AVX2 支持\"),\"1\",\"0\")," \
     "T([\"WINEMSYNC\"],\"MSync\",\"1\",\"0\")," \
     "T([\"NOTPROTON_RETINA\"],npL(\"High Resolution\",\"高分辨率\"),\"1\",\"0\")" \
     "]},\"gfx\")," \

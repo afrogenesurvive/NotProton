@@ -63,6 +63,30 @@ static void check_fallback(void) {
     np_log_level = saved;
 }
 
+static void check_fex_tools(void) {
+    np_webpatch_set_fex_tools((const char *[]){ "notproton-fex", "bad name", NULL, "",
+                                                "x\"y", "notproton-fex-41069" }, 6);
+    if (strcmp(g_fex_tools, "[\"notproton-fex\",\"notproton-fex-41069\"]") != 0)
+        wrong("the FEX tool array is %s", g_fex_tools);
+
+    np_webpatch_set_fex_tools(NULL, 0);
+    if (strcmp(g_fex_tools, "[]") != 0) wrong("no FEX tools gives %s", g_fex_tools);
+
+    char names[NP_WEBPATCH_FEX_TOOLS_MAX + 1][NP_TOOL_NAME_MAX];
+    const char *list[NP_WEBPATCH_FEX_TOOLS_MAX + 1];
+    for (int i = 0; i <= NP_WEBPATCH_FEX_TOOLS_MAX; i++) {
+        memset(names[i], 'a', NP_TOOL_NAME_MAX - 1);
+        names[i][NP_TOOL_NAME_MAX - 1] = '\0';
+        names[i][0] = (char)('A' + i);
+        list[i] = names[i];
+    }
+    np_webpatch_set_fex_tools(list, NP_WEBPATCH_FEX_TOOLS_MAX + 1);
+    size_t want = 2 + NP_WEBPATCH_FEX_TOOLS_MAX * (NP_TOOL_NAME_MAX + 2) - 1;
+    if (strlen(g_fex_tools) != want || strchr(g_fex_tools, 'A' + NP_WEBPATCH_FEX_TOOLS_MAX))
+        wrong("the longest FEX tool array is %zu bytes, not %zu", strlen(g_fex_tools), want);
+    np_webpatch_set_fex_tools(NULL, 0);
+}
+
 // Invariants the transform relies on but cannot check at run time. A replacement still
 // holding its own anchor would be found again next pass, and an anchor inside another
 // anchor would make the result depend on table order rather than on the chunk.
@@ -254,9 +278,10 @@ int main(int argc, char **argv) {
     if (argc == 4 && strcmp(argv[1], "--extract") == 0)
         return extract(argv[2], argv[3]);
 
-    if (argc < 2) { selfcheck(); check_fallback(); return g_wrong; }
+    if (argc < 2) { selfcheck(); check_fallback(); check_fex_tools(); return g_wrong; }
 
     np_webpatch_set_fallback_tool("notproton-fex");
+    np_webpatch_set_fex_tools((const char *[]){ "notproton-fex", "notproton-fex-41069" }, 2);
 
     for (int i = 1; i < argc; i++) {
         size_t len = 0;
