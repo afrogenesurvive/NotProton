@@ -41,6 +41,6 @@ Developer Notes:
 
 As far as the source structure goes, the macOS app itself is located in the ```app``` folder. The core logic is in ```dylib```.
 ```lsteamclient``` is a macOS port of Valve's lsteamclient. ```steam-shim```is a port of Valve's
-steam-helper from Proton 9. ntdll-patch patches the copy of CrossOver that the app
+steam-helper from Proton 9.0. ntdll-patch patches the copy of CrossOver that the app
 makes/places in the ```~/Library/Application Support/notproton/runners/``` folder so that
 lsteamclient is loaded.
