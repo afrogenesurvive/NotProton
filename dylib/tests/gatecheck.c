@@ -87,6 +87,38 @@ static void check_fex_tools(void) {
     np_webpatch_set_fex_tools(NULL, 0);
 }
 
+static void check_captures(void) {
+    int seen = 0;
+    for (int c = 1; c < 256; c++) {
+        int ci = cap_index((unsigned char)c);
+        if (ci < 0) continue;
+        seen |= 1 << ci;
+        if (ci >= NP_CAP_MAX || c == ' ' || (c >= '\t' && c <= '\r') || marker_text((char)c))
+            wrong("byte %d reads as capture %d", c, ci + 1);
+    }
+    if (seen != (1 << NP_CAP_MAX) - 1) wrong("captures bound by byte: %#x", seen);
+
+    static const struct { const char *src, *find; size_t want; } cases[] = {
+        { "(0,T.CI)()",  "(0," NP_C1 ".CI)()", 10 },
+        { "(0,9T.CI)()", "(0," NP_C1 ".CI)()", 0 },
+        { "(0,.CI)()",   "(0," NP_C1 ".CI)()", 0 },
+        { "ab.CI",       NP_C1 ".CI",           5 },
+        { "a.b(a)",      NP_C1 ".b(" NP_C1 ")", 6 },
+        { "a.b(c)",      NP_C1 ".b(" NP_C1 ")", 0 },
+    };
+    np_cap_t caps[NP_CAP_MAX];
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        const char *s = cases[i].src;
+        size_t got = match_at(s, strlen(s), 0, cases[i].find, caps);
+        if (got != cases[i].want) wrong("capture case %zu matched %zu bytes, wanted %zu",
+                                        i, got, cases[i].want);
+    }
+    if (match_at("xab.CI", 6, 1, NP_C1 ".CI", caps))
+        wrong("a capture matched from the middle of a name");
+    if (match_at("x.ab.CI", 7, 2, NP_C1 ".CI", caps) || match_at("x?.ab.CI", 8, 3, NP_C1 ".CI", caps))
+        wrong("a capture matched a member");
+}
+
 // Invariants the transform relies on but cannot check at run time. A replacement still
 // holding its own anchor would be found again next pass, and an anchor inside another
 // anchor would make the result depend on table order rather than on the chunk.
@@ -278,7 +310,10 @@ int main(int argc, char **argv) {
     if (argc == 4 && strcmp(argv[1], "--extract") == 0)
         return extract(argv[2], argv[3]);
 
-    if (argc < 2) { selfcheck(); check_fallback(); check_fex_tools(); return g_wrong; }
+    if (argc < 2) {
+        selfcheck(); check_captures(); check_fallback(); check_fex_tools();
+        return g_wrong;
+    }
 
     np_webpatch_set_fallback_tool("notproton-fex");
     np_webpatch_set_fex_tools((const char *[]){ "notproton-fex", "notproton-fex-41069" }, 2);

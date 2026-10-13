@@ -468,7 +468,7 @@ struct StatusView: View {
                 action: installAction(prominent: true)
             )
         case .installed(let version):
-            if payload.isComplete {
+            if payload.isSteamComplete {
                 StatusRow(
                     title: "NotProton",
                     value: String(localized: "Installed") + (version.map { " (\($0))" } ?? ""),
@@ -477,9 +477,9 @@ struct StatusView: View {
             } else {
                 StatusRow(
                     title: "NotProton",
-                    value: String(localized: "Installed, but not for this account."),
+                    value: String(localized: "Steam integration needs repair."),
                     tone: .warning,
-                    detail: String(localized: "Steam is set up for NotProton, but this account is missing its components. Install to add them."),
+                    detail: steamRepairDetail(payload),
                     action: installAction(prominent: true)
                 )
             }
@@ -695,6 +695,13 @@ struct StatusView: View {
         ) {
             status.requestBuildRemoval(build)
         }
+    }
+
+    private func steamRepairDetail(_ payload: PayloadState) -> String {
+        if let problem = payload.manifestProblem { return problem }
+        var names = payload.missingSteamFiles
+        if payload.signatureDatabase == nil { names.append(String(localized: "Signature database")) }
+        return String(localized: "Missing: \(names.joined(separator: ", ")). Install to restore these files for your macOS user.")
     }
 
     private func fetchAction() -> StatusAction {
