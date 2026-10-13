@@ -192,6 +192,28 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     "const n=G.findIndex(w=>m(w)||!/^[A-Za-z_]\\w*=/.test(o.slice(w.start,w.end)));" \
     "return{p:G[0].start,e:G.slice(0,n<0?G.length:n)}})(),"
 
+// Rewrites KEY=value entries before %command% and leaves the rest of the text byte for byte.
+#define NP_CX_LAUNCH \
+    "(o,id)=>{const " NP_CX_LAUNCH_PARSE \
+    "g=k=>{const p=E.e.filter(w=>o.startsWith(k+\"=\",w.start)).pop();" \
+    "return p?(p.value===null?o.slice(p.start+k.length+1,p.end):p.value.slice(k.length+1)):\"\"}," \
+    "qv=v=>/^[\\w.,:=\\/+@%-]*$/.test(v)?v:\"'\"+v.replace(/'/g,\"'\\\\''\")+\"'\"," \
+    "s=ps=>{const add=ps.filter(p=>p[1]).map(p=>p[0]+\"=\"+qv(p[1])).join(\" \");let r;" \
+    "if(!/%command%/i.test(o)){if(!add)return;r=add+\" %command%\"+(o.trim()?\" \"+o:\"\")}" \
+    "else{let at=E.p;r=o.slice(0,at)+(add?add+\" \":\"\");" \
+    "E.e.forEach(w=>{if(ps.some(p=>o.startsWith(p[0]+\"=\",w.start))){" \
+    "r+=o.slice(at,w.start);at=w.end;while(o[at]===\" \"||o[at]===\"\\t\")at++}});r+=o.slice(at)}" \
+    "SteamClient.Apps.SetAppLaunchOptions(id,r.trim()===\"%command%\"?\"\":r)};" \
+    "return{g,s,k:E.e.map(w=>o.slice(w.start,w.end).split(\"=\")[0])}}"
+
+#define NP_CX_PICK \
+    "(t,n)=>{const o=t.strLaunchOptions||\"\";" \
+    "if(" NP_FEX_TOOLS ".indexOf(n)<0||/[<>\\n]|\\$'/.test(o))return;" \
+    "const L=MSCXLaunch(o,t.unAppID)," \
+    "ks=L.k.filter(k=>/^D3DM_[A-Z0-9_]*$/.test(k)||k===\"ROSETTA_ADVERTISE_AVX\"" \
+    "||k===\"CX_GRAPHICS_BACKEND\"&&L.g(k)===\"d3dmetal\");" \
+    "ks.length&&L.s(ks.map(k=>[k,\"\"]))}"
+
 // CrossOver options panel. Not in great shape, but it'll do
 #define NP_WEB_IS_ZH \
     "(()=>{const l=(globalThis.document?.documentElement?.lang||" \
@@ -212,33 +234,19 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     ".MSCXPanel .MSCXRow{display:flex;flex-direction:row;padding:9px;margin:0;" \
     "color:#dfe3e6;background:rgba(59,63,72,.5);border-radius:3px}" \
     ".MSCXPanel .MSCXRow:hover{box-shadow:0 6px 8px 0 rgba(0,0,0,.16)}" \
-    ".MSCXPanel .MSCXNote{padding:6px 2px 0;color:#ffc82c;font-size:13px}" \
     ".MSCXNoBottomGap{margin-bottom:0}\""
 
-// The FEX build runs arm64 Wine, so D3DMetal (x86_64 only) and its DLSS flag cannot
-// load, and Rosetta, which reads ROSETTA_ADVERTISE_AVX, never runs. A game already set
-// to D3DMetal keeps the entry and a note, so the page does not claim a backend the game
-// is not getting.
+// FEX runs arm64 Wine, which has no D3DMetal and never runs under Rosetta.
 #define NP_CX_OPTIONS_BODY(ARG, RT, BARREL) \
     ARG "=>{" \
     "const t=" ARG ".details,o=t.strLaunchOptions||\"\"," \
     "fex=" NP_FEX_TOOLS ".indexOf(t.strCompatToolName||\"" NP_FALLBACK_TOOL "\")>=0," \
     "npZh=" NP_WEB_IS_ZH ",npL=(en,zh)=>npZh?zh:en," \
-    NP_CX_LAUNCH_PARSE \
-    "g=k=>{const p=E.e.filter(w=>o.startsWith(k+\"=\",w.start)).pop();" \
-    "return p?(p.value===null?o.slice(p.start+k.length+1,p.end):p.value.slice(k.length+1)):\"\"}," \
-    "qv=v=>/^[\\w.,:=\\/+@%-]*$/.test(v)?v:\"'\"+v.replace(/'/g,\"'\\\\''\")+\"'\"," \
-    "s=ps=>{const add=ps.filter(p=>p[1]).map(p=>p[0]+\"=\"+qv(p[1])).join(\" \");let r;" \
-    "if(!/%command%/i.test(o)){if(!add)return;r=add+\" %command%\"+(o.trim()?\" \"+o:\"\")}" \
-    "else{let at=E.p;r=o.slice(0,at)+(add?add+\" \":\"\");" \
-    "E.e.forEach(w=>{if(ps.some(p=>o.startsWith(p[0]+\"=\",w.start))){" \
-    "r+=o.slice(at,w.start);at=w.end;while(o[at]===\" \"||o[at]===\"\\t\")at++}});r+=o.slice(at)}" \
-    "SteamClient.Apps.SetAppLaunchOptions(t.unAppID,r.trim()===\"%command%\"?\"\":r)}," \
+    "L=MSCXLaunch(o,t.unAppID),g=L.g,s=L.s," \
     "T=(ks,l,on,off)=>(0," RT ".jsx)(" BARREL ".Yh,{className:\"MSCXRow\",label:l," \
     "checked:g(ks[0])===on," \
     "onChange:v=>s(ks.map(k=>[k,v?on:(off||\"\")]))},ks[0])," \
-    "b=g(\"CX_GRAPHICS_BACKEND\")," \
-    "dk=fex&&\"d3dmetal\"===b," \
+    "bv=g(\"CX_GRAPHICS_BACKEND\"),b=fex&&\"d3dmetal\"===bv?\"\":bv," \
     "dm=!fex&&(\"\"===b||\"d3dmetal\"===b)," \
     "dx=\"\"===b||\"dxmt\"===b," \
     "sw=\"1\"===g(\"DXMT_METALFX_SPATIAL_SWAPCHAIN\")," \
@@ -257,7 +265,7 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     "{data:\"d3dmetal\",label:\"D3DMetal\"}," \
     "{data:\"dxmt\",label:\"DXMT\"}," \
     "{data:\"dxvk\",label:\"DXVK\"}," \
-    "{data:\"wined3d\",label:\"WineD3D\"}].filter(x=>!fex||dk||x.data!==\"d3dmetal\");" \
+    "{data:\"wined3d\",label:\"WineD3D\"}].filter(x=>!fex||x.data!==\"d3dmetal\");" \
     "if(t.unAppID<2147483648&&(t.vecPlatforms||[]).indexOf(\"osx\")>=0" \
     "&&!t.strCompatToolName)return null;" \
     "return(0," RT ".jsx)(\"div\",{className:\"MSCXPanel\",children:(0," RT ".jsxs)(" RT ".Fragment,{children:[" \
@@ -269,10 +277,6 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     ".concat(\"\"===v.data||\"dxmt\"===v.data?[]:" \
     "[[\"DXMT_METALFX_SPATIAL_SWAPCHAIN\",\"\"],[\"DXMT_CONFIG\",fx(\"\")]])" \
     ".concat(\"dxmt\"===v.data?[]:[[\"DXMT_ENABLE_NVEXT\",\"\"]]))})," \
-    "dk&&(0," RT ".jsx)(\"div\",{className:\"MSCXNote\"," \
-    "children:npL(\"D3DMetal needs the Rosetta build of CrossOver. On the FEX build, " \
-    "this game runs on another backend.\",\"D3DMetal 需要 Rosetta 版 CrossOver。" \
-    "在 FEX 版中，此游戏会使用其他图形后端。\")},\"fexnote\")," \
     "T([\"MTL_HUD_ENABLED\"],npL(\"Metal HUD\",\"Metal 性能监视器\"),\"1\")," \
     "dm&&T([\"D3DM_ENABLE_METALFX\"],\"DLSS\",\"1\")," \
     "\"dxmt\"===b&&T([\"DXMT_ENABLE_NVEXT\"],\"DLSS\",\"1\")," \
@@ -293,10 +297,12 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     "]})})}"
 
 #define NP_CX_OPTIONS_COMPONENT \
+    "MSCXLaunch=" NP_CX_LAUNCH ",MSCXPick=" NP_CX_PICK "," \
     "MSCXOpts=" NP_CX_OPTIONS_BODY("e", "i", "c") ","
 
 // Valve is testing a new compatibility page UI, this logic relates to supporting that
 #define NP_CX_OPTIONS_STATEMENT \
+    "var MSCXLaunch=" NP_CX_LAUNCH ";" \
     "var MSCXOpts=" NP_CX_OPTIONS_BODY("np", NP_C3, NP_C4) ";"
 
 // 1.0.x saved CrossOver settings without %command%, this migrates them.
@@ -346,8 +352,8 @@ static const np_gate_t g_gates_forcetool[] = {
       "return(0,i.jsxs)(i.Fragment,{children:[0!=a.length&&(0,i.jsx)(_r,{label:(0,A.we)"
       "(\"#AppProperties_CompatilibityForceTool\"),checked:g,onChange:C,disabled:!r||0===a.length}),"
       "g&&a.length>0&&(0,i.jsx)(c.m,{strClassName:K().TopGap+\" MSCXNoBottomGap\",rgOptions:d,"
-      "selectedOption:t.strCompatToolName,onChange:e=>SteamClient.Apps.SpecifyCompatTool"
-      "(t.unAppID,e.data)})]})", 1 },
+      "selectedOption:t.strCompatToolName,onChange:e=>{SteamClient.Apps.SpecifyCompatTool"
+      "(t.unAppID,e.data);MSCXPick(t,e.data)}})]})", 1 },
     // Compatibility page container
     { "Rt=(0,a.PA)(e=>(0,i.jsxs)(c.nB,{children:[(0,i.jsx)(\"div\",{className:K().HiddenIfNotLast,"
       "children:(0,A.we)(\"#AppProperties_CompatibilityNoOptions\")}),(0,i.jsx)(It,{...e}),"

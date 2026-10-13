@@ -37,8 +37,10 @@ function panel(emit, form, globals = { document: { documentElement: { lang: 'en'
   const SteamClient = {
     Apps: { SetAppLaunchOptions: (appid, opts) => written.push({ appid, opts }) },
   };
-  const build = new Function(f.react, f.barrel, 'SteamClient', 'globalThis', src + '\nreturn MSCXOpts;');
-  return { render: build(react, barrel, SteamClient, globals), written };
+  const build = new Function(f.react, f.barrel, 'SteamClient', 'globalThis',
+    src + '\nreturn { MSCXOpts, MSCXPick: typeof MSCXPick === "function" ? MSCXPick : null };');
+  const { MSCXOpts, MSCXPick } = build(react, barrel, SteamClient, globals);
+  return { render: MSCXOpts, pick: MSCXPick, written };
 }
 
 // Function components are resolved rather than recorded, so a check sees the nodes the

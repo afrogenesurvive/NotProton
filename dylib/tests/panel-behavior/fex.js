@@ -21,7 +21,6 @@ for (const form of Object.keys(FORMS)) {
       walk(P({ details: details(opts + ' %command%', { strCompatToolName: tool }) }));
     const toggles = ns => ns.filter(x => x.type === 'Toggle').map(x => x.props.label);
     const backends = ns => ns.find(x => x.type === 'Dropdown').props.rgOptions.map(o => o.data);
-    const note = ns => ns.some(x => x.props.className === 'MSCXNote');
 
     let r = nodes('');
     t.ok(backends(r).includes('d3dmetal') === !fex,
@@ -29,13 +28,11 @@ for (const form of Object.keys(FORMS)) {
     t.ok(toggles(r).includes(AVX) === !fex, `the AVX2 row is ${fex ? 'hidden' : 'shown'}`);
     t.ok(toggles(r).includes('DLSS') === !fex,
          `automatic ${fex ? 'hides' : 'shows'} the D3DMetal DLSS row`);
-    t.ok(!note(r), 'automatic shows no note');
 
-    // Kept as an entry so the dropdown still names what the options say, with a note
-    // that the game is not getting it.
     r = nodes('CX_GRAPHICS_BACKEND=d3dmetal D3DM_ENABLE_METALFX=1');
-    t.ok(backends(r).includes('d3dmetal'), 'a game set to D3DMetal still shows it selected');
-    t.ok(note(r) === fex, `the D3DMetal note is ${fex ? 'shown' : 'absent'}`);
+    const picked = r.find(x => x.type === 'Dropdown').props.selectedOption;
+    t.ok(backends(r).includes('d3dmetal') === !fex && picked === (fex ? '' : 'd3dmetal'),
+         `a game set to D3DMetal shows ${fex ? 'Automatic' : 'D3DMetal'} (${picked})`);
     t.ok(toggles(r).includes('DLSS') === !fex,
          `D3DMetal ${fex ? 'hides' : 'shows'} its DLSS row`);
 
@@ -52,7 +49,7 @@ for (const form of Object.keys(FORMS)) {
     t.ok(opts.includes('CX_GRAPHICS_BACKEND=dxmt') && !opts.includes('D3DM_ENABLE_METALFX'),
          `switching off D3DMetal drops its flag (${opts})`);
 
-    // Hidden is not cleared: a value set under the Rosetta build is left for it.
+    // Only picking a FEX tool clears hidden values.
     written.length = 0;
     const kept = 'ROSETTA_ADVERTISE_AVX=1 CX_GRAPHICS_BACKEND=dxvk';
     r = nodes(kept);
@@ -80,14 +77,31 @@ for (const form of Object.keys(FORMS)) {
   tp.ok(pr.find(x => x.type === 'Dropdown').props.rgOptions.some(o => o.data === 'd3dmetal'),
         'a tool whose name prefixes a FEX tool keeps the Rosetta options');
   failed += tp.failed;
+}
 
-  const { render: Z } = panel(emit, form, { document: { documentElement: { lang: 'zh-CN' } } },
-                              { fexTools: FEX_TOOLS });
-  const t = runner(`${form}, FEX, Chinese`);
-  const zh = walk(Z({ details: details('CX_GRAPHICS_BACKEND=d3dmetal %command%',
-                                       { strCompatToolName: 'notproton-fex' }) }));
-  const text = (zh.find(x => x.props.className === 'MSCXNote') || { props: {} }).props.children;
-  t.ok(/^D3DMetal 需要/.test(text || ''), `the note is translated (${text})`);
+{
+  const { pick, written } = panel(emit, 'component', undefined, { fexTools: FEX_TOOLS });
+  const t = runner('component, picking a tool');
+  const choose = (opts, tool) => {
+    written.length = 0;
+    pick(details(opts), tool);
+    return written.length ? written[written.length - 1].opts : null;
+  };
+  const all = 'WINEDEBUG=-all CX_GRAPHICS_BACKEND=d3dmetal D3DM_ENABLE_METALFX=1 MTL_HUD_ENABLED=1 ' +
+              "ROSETTA_ADVERTISE_AVX=0 DXMT_CONFIG='a;b' %command% -novid";
+  const r = choose(all, 'notproton-fex');
+  t.ok(r === "WINEDEBUG=-all MTL_HUD_ENABLED=1 DXMT_CONFIG='a;b' %command% -novid",
+       `picking FEX drops only the D3DMetal and Rosetta entries (${r})`);
+  t.ok(choose(all, 'notproton-rosetta') === null, 'picking a Rosetta tool writes nothing');
+  t.ok(choose('D3DM_lower=1 %command%', 'notproton-fex') === null,
+       'names the launch script does not forward are left alone');
+  for (const o of ['>D3DM_LOG=1 %command%', "X=$'a\\'b D3DM_Y=1 c' %command%",
+                   'wrapper <(x) D3DM_Y=1 %command%', 'D3DM_Y=1 \\\n%command%'])
+    t.ok(choose(o, 'notproton-fex') === null, `text the parser does not model is left alone (${o})`);
+  t.ok(choose('CX_GRAPHICS_BACKEND=dxmt %command%', 'notproton-fex') === null,
+       'another backend is not a reason to write');
+  t.ok(choose('-novid CX_GRAPHICS_BACKEND=d3dmetal', 'notproton-fex') === null,
+       'text after the game, not set before %command%, is left alone');
   failed += t.failed;
 }
 console.log(failed ? `\n${failed} failure(s)` : '\nFEX hides what it cannot run, Rosetta keeps everything');
