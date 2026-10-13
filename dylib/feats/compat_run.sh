@@ -1453,35 +1453,6 @@ install_bundle() (
 )
 install_bundle
 
-wine_helpers='winedevice\.exe|services\.exe|plugplay\.exe|svchost\.exe'
-wine_helpers="$wine_helpers|rpcss\.exe|explorer\.exe|steam\.exe"
-wine_helpers="$wine_helpers|winemenubuilder\.exe|conhost\.exe|start\.exe"
-wine_helpers="$wine_helpers|wineboot\.exe|rundll32\.exe|tabtip\.exe"
-wine_helpers="$wine_helpers|vc_redist|vcredist|dxsetup\.exe|msiexec\.exe"
-wine_helpers="$wine_helpers|installinf|iscriptevaluator\.exe|regsvr32\.exe"
-wine_helpers="$wine_helpers|winedbg\.exe|unitycrashhandler"
-prefix_game_running() {
-  command -v lsof >/dev/null 2>&1 || return 1
-  dir=$(prefix_server_dir) || return 1
-  [ -d "$dir" ] || return 1
-  pids=$(lsof -t +D "$dir" 2>/dev/null | sort -u | tr '\n' ',')
-  pids=${pids%,}
-  [ -n "$pids" ] || return 1
-  # shellcheck disable=SC1003 # the pair matches the backslash in a drive path
-  ps -p "$pids" -o args= 2>/dev/null | grep -E '^[A-Za-z]:\\' | grep -viE "$wine_helpers" | grep -q .
-}
-
-wait_prefix_idle() {
-  idle=0
-  tick=0
-  while [ "$idle" -lt 10 ] && [ "$tick" -lt 300 ]; do
-    tick=$((tick + 1))
-    if prefix_game_running; then idle=0; else idle=$((idle + 1)); fi
-    sleep 1
-  done
-  echo "wait_prefix_idle done after tick=$tick idle=$idle" >> "$log" 2>&1 || true
-}
-
 kill_wine_prefix() {
   "$WINESERVER" -k >> "$log" 2>&1 || true
   "$WINESERVER" -w >> "$log" 2>&1 || true
@@ -1541,29 +1512,7 @@ lsregister="$lsregister/Frameworks/LaunchServices.framework/Support/lsregister"
 open -n -W -a "$loader_app" "$@" >> "$log" 2>&1 &
 open_pid=$!
 status=0
-seen=0
-idle=0
-while :; do
-  if prefix_game_running; then
-    seen=1
-    idle=0
-  else
-    idle=$((idle + 1))
-  fi
-  if ! kill -0 "$open_pid" 2>/dev/null; then
-    wait "$open_pid" || status=$?
-    echo "=== bundle exited status=$status ===" >> "$log" 2>&1 || true
-    if [ "$status" -le 128 ]; then
-      wait_prefix_idle
-    fi
-    break
-  fi
-  if [ "$seen" -eq 1 ] && [ "$idle" -ge 10 ]; then
-    echo "=== game tree gone, ending session ===" >> "$log" 2>&1 || true
-    break
-  fi
-  sleep 1
-done
+wait "$open_pid" || status=$?
 echo "=== game exited status=$status, killing wine prefix ===" >> "$log" 2>&1 || true
 kill_wine_prefix
 echo "=== wine prefix killed, session ending ===" >> "$log" 2>&1 || true
