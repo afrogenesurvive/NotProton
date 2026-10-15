@@ -23,3 +23,6 @@ DerivedData/
 
 app/Sources/NotProtonApp/Resources/payload/
 __pycache__/
+
+# Local game/save migration helpers (not part of the project)
+migration/

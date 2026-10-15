@@ -165,7 +165,7 @@ struct StatusView: View {
         String(localized: "Steam client updates may break NotProton. If you don't want to wait for NotProton to be updated to be compatible with future Steam versions at the cost of not getting updates to the Steam client, you can stop the Steam client from updating itself.")
 
     var body: some View {
-        Group {
+        let base = Group {
             if let snapshot = status.snapshot {
                 statusForm(snapshot)
             } else {
@@ -175,14 +175,10 @@ struct StatusView: View {
         }
         .navigationTitle("Status")
         .toolbar {
-            if #available(macOS 26.1, *) {
-                ToolbarItem(placement: .primaryAction) { refreshButton }
-                    .visibilityPriority(.high)
-            } else {
-                ToolbarItem(placement: .primaryAction) { refreshButton }
-            }
+            ToolbarItem(placement: .primaryAction) { refreshButton }
         }
-        .confirmationDialog(
+
+        let withBlockUpdates = base.confirmationDialog(
             String(localized: "Block Steam client updates?"),
             isPresented: asking(.blockUpdates),
             titleVisibility: .visible
@@ -194,7 +190,8 @@ struct StatusView: View {
         } message: {
             Text(Self.updateBlockPrompt)
         }
-        .confirmationDialog(
+
+        let withReplaceSteam = withBlockUpdates.confirmationDialog(
             String(localized: "Replace Steam with Valve's bundle?"),
             isPresented: asking(.replaceSteam),
             titleVisibility: .visible
@@ -208,7 +205,8 @@ struct StatusView: View {
                 String(localized: "This will restore Steam itself to its original state but does not remove the support components used by NotProton.")
             )
         }
-        .confirmationDialog(
+
+        let withRemoveBuild = withReplaceSteam.confirmationDialog(
             status.pendingRemoval.map {
                 String(localized: "Remove the \(SupportedRunners.displayVersion(forID: $0)) copy?")
             } ?? "",
@@ -222,7 +220,8 @@ struct StatusView: View {
         } message: {
             Text("CrossOver itself is not removed.")
         }
-        .confirmationDialog(
+
+        let withRemoveEverything = withRemoveBuild.confirmationDialog(
             String(localized: "Remove everything NotProton has created?"),
             isPresented: asking(.removeEverything),
             titleVisibility: .visible
@@ -234,7 +233,8 @@ struct StatusView: View {
         } message: {
             Text(Uninstall.confirmation())
         }
-        .confirmationDialog(
+
+        let withInstallUnlicensed = withRemoveEverything.confirmationDialog(
             CrossOverLicense.notActivatedTitle,
             isPresented: asking(.installUnlicensed),
             titleVisibility: .visible
@@ -249,8 +249,10 @@ struct StatusView: View {
                     + String(localized: " NotProton can be deployed, but the CrossOver compatibility tool cannot be installed without a valid license.")
             )
         }
-        .task { if status.snapshot == nil { await status.refresh() } }
-        .confirmationDialog(
+
+        let withTask = withInstallUnlicensed.task { if status.snapshot == nil { await status.refresh() } }
+
+        return withTask.confirmationDialog(
             CrossOverLicense.notActivatedTitle,
             isPresented: asking(.toolUnlicensed),
             titleVisibility: .visible

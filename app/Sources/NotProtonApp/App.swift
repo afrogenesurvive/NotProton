@@ -6,6 +6,7 @@ struct NotProtonApp: App {
 
     @State private var status = SystemStatus()
     @State private var prefixes = PrefixesModel()
+    @State private var migration = MigrationModel()
     @State private var pane: Pane = .status
     private let updater = AppUpdater()
 
@@ -18,8 +19,12 @@ struct NotProtonApp: App {
             RootView(pane: $pane)
                 .environment(status)
                 .environment(prefixes)
+                .environment(migration)
                 .frame(minWidth: 720, minHeight: 460)
-                .onChange(of: pane) { prefixes.forgetOutcome() }
+                .onChange(of: pane) {
+                    prefixes.forgetOutcome()
+                    migration.forgetOutcome()
+                }
                 .onChange(of: status.snapshot?.installedRunners.map(\.id)) {
                     if prefixes.hasLoaded { Task { await prefixes.load() } }
                 }
@@ -43,6 +48,8 @@ struct NotProtonApp: App {
                 .keyboardShortcut("2", modifiers: .command)
             Button("Prefix Backups") { pane = .backups }
                 .keyboardShortcut("3", modifiers: .command)
+            Button("Games") { pane = .games }
+                .keyboardShortcut("4", modifiers: .command)
 
             Divider()
 
@@ -51,11 +58,12 @@ struct NotProtonApp: App {
                     switch pane {
                     case .status: await status.refresh()
                     case .prefixes, .backups: await prefixes.load()
+                    case .games: await migration.load()
                     }
                 }
             }
             .keyboardShortcut("r", modifiers: .command)
-            .disabled(pane == .status ? !status.isIdle : prefixes.isLoading)
+            .disabled(pane == .status ? !status.isIdle : (pane == .games ? migration.isLoading : prefixes.isLoading))
 
             Divider()
         }

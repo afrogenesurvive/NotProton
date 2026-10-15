@@ -6,7 +6,7 @@ struct BackupsView: View {
     @State private var selection = Set<PrefixBackup.ID>()
 
     var body: some View {
-        Group {
+        let base = Group {
             if !model.hasLoaded {
                 ProgressView("Looking for backups")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -39,18 +39,15 @@ struct BackupsView: View {
             }
         }
         .toolbar {
-            if #available(macOS 26.1, *) {
-                ToolbarItemGroup(placement: .primaryAction) { strip }
-                    .visibilityPriority(.high)
-            } else {
-                ToolbarItemGroup(placement: .primaryAction) { strip }
-            }
+            ToolbarItemGroup(placement: .primaryAction) { strip }
         }
-        .task { if model.prefixes.isEmpty { await model.load() } }
-        .onChange(of: model.backups) { _, kept in
+
+        let withTask = base.task { if model.prefixes.isEmpty { await model.load() } }
+        let withChange = withTask.onChange(of: model.backups) { _, kept in
             selection = selection.filter { id in kept.contains { $0.id == id } }
         }
-        .confirmationDialog(
+
+        return withChange.confirmationDialog(
             PrefixPrompt.deleteBackupsTitle(clearing),
             isPresented: asking,
             titleVisibility: .visible
