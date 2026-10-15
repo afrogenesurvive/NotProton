@@ -115,14 +115,18 @@ enum SupportedRunners {
         case .build(let id): id
         case .nobody: nil
         }
-        let served = all.filter { installed.contains($0.id) }.flatMap { build in
-            build.tools.enumerated().map { index, tool in
+        let served: [InstalledTool] = all.filter { build in
+            installed.contains(build.id)
+        }.flatMap { (build: RunnerBuild) -> [InstalledTool] in
+            build.tools.enumerated().map { (index: Int, tool: CompatTool) -> InstalledTool in
                 let name = build.id == holder && index == 0 ? legacyToolName : tool.name
                 return InstalledTool(
                     tool: CompatTool(name: name, flavor: tool.flavor, display: tool.display), build: build.id
                 )
             }
-        }.filter { $0.tool.flavor != .fex || fexAvailable || kept.contains($0.name) }
+        }.filter { tool in
+            tool.tool.flavor != .fex || fexAvailable || kept.contains(tool.name)
+        }
         func rank(_ tool: InstalledTool) -> Int {
             toolPreference.firstIndex(of: tool.name) ?? toolPreference.count
         }

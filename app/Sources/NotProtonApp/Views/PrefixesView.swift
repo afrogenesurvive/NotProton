@@ -11,7 +11,7 @@ struct PrefixesView: View {
     @State private var winetricksVerbs = ""
 
     var body: some View {
-        Group {
+        let base = Group {
             if !model.hasLoaded {
                 ProgressView("Looking for prefixes")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -52,15 +52,12 @@ struct PrefixesView: View {
             }
         }
         .toolbar {
-            if #available(macOS 26.1, *) {
-                ToolbarItemGroup(placement: .primaryAction) { strip }
-                    .visibilityPriority(.high)
-            } else {
-                ToolbarItemGroup(placement: .primaryAction) { strip }
-            }
+            ToolbarItemGroup(placement: .primaryAction) { strip }
         }
-        .task { if model.prefixes.isEmpty { await model.load() } }
-        .confirmationDialog(
+
+        let withTask = base.task { if model.prefixes.isEmpty { await model.load() } }
+
+        let withDelete = withTask.confirmationDialog(
             PrefixPrompt.deleteTitle(deleting),
             isPresented: asking(.delete),
             titleVisibility: .visible
@@ -75,7 +72,8 @@ struct PrefixesView: View {
         } message: {
             Text(PrefixPrompt.deleteMessage(deleting))
         }
-        .confirmationDialog(
+
+        let withRebuild = withDelete.confirmationDialog(
             PrefixPrompt.rebuildTitle(rebuilding, for: rebuildTool),
             isPresented: asking(.rebuild),
             titleVisibility: .visible
@@ -91,7 +89,8 @@ struct PrefixesView: View {
         } message: {
             Text(PrefixPrompt.rebuildMessage())
         }
-        .confirmationDialog(
+
+        let withBackUp = withRebuild.confirmationDialog(
             PrefixPrompt.backUpTitle(backingUp),
             isPresented: asking(.backUp),
             titleVisibility: .visible
@@ -106,7 +105,8 @@ struct PrefixesView: View {
         } message: {
             Text(PrefixPrompt.backUpMessage(backingUp))
         }
-        .alert(
+
+        return withBackUp.alert(
             "Winetricks",
             isPresented: Binding(
                 get: { winetricksPrefix != nil },
