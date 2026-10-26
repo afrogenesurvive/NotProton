@@ -29,3 +29,6 @@ __pycache__/
 
 # game/save migration helpers (local-only)
 migration/
+
+# Trello card preservation (local-only)
+preservation/
