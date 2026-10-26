@@ -26,3 +26,6 @@ __pycache__/
 
 # devsec_cogdebt derived artifacts
 .devsec_cogdebt/
+
+# game/save migration helpers (local-only)
+migration/
